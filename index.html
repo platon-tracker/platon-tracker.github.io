@@ -74,6 +74,7 @@ h2{font-size:11px;line-height:1.6;margin:22px 0 8px;color:var(--grass-d)}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 .btn.rep{width:100%;font-size:16px;min-height:52px}
 .dad{margin-top:10px;background:var(--card);border:2px solid var(--line);border-radius:8px;padding:10px}.dad summary{font-weight:800;cursor:pointer}.dad textarea{width:100%;margin:8px 0;font:inherit;border:2px solid var(--line);border-radius:6px;padding:8px;background:var(--bg);color:var(--ink)}
+.hint{font-size:12px;color:var(--mute);margin-top:6px}
 :focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 </style>
 </head>
@@ -92,6 +93,8 @@ h2{font-size:11px;line-height:1.6;margin:22px 0 8px;color:var(--grass-d)}
     <button class="btn ghost" id="m15">−15 сыграл</button>
     <button class="btn ghost" id="p15">+15</button>
   </div>
+  <div class="play"><b>🏦 В банке: <span id="bank">0</span> мин.</b><button class="btn ghost" id="bm">−15</button><button class="btn ghost" id="bp">+15 из банка</button></div>
+  <div class="hint">Всё, что больше 120 минут за день, копится в банке. Тратить можно в субботу и воскресенье, до +60 минут в день.</div>
   <div class="ban" id="ban">⛔ Сегодня без игр. Завтра новый день — правда безопасна.</div>
 </section>
 
@@ -142,7 +145,6 @@ const GROUPS=[
  {t:'Нарушения',neg:true,items:[
   ['ng','Не сказал про оценку',-30],
   ['ig','Игнорировал договор',-60],
-  ['nd','Не выполнил обязанность',-30],
   ['lie','Соврал (в том числе про оценку)',0,'Один день без игр',1],
   ['tv','Нарушил правила ТВ или телефона',0,'Один день без игр',1]]}
 ];
@@ -164,6 +166,7 @@ const ACH=[
  ['k','📚','Знаток','3 познавательные передачи',s=>(s.cnt.sci||0)>=3],
  ['s3','🔥','Серия 3','3 хороших дня подряд',s=>s.best>=3],
  ['s7','🏆','Неделя без срывов','7 хороших дней подряд',s=>s.best>=7],
+ ['b','🏦','Копилка','Накопи 60 минут в банке',s=>s.bank>=60],
  ['l5','👑','Уровень 5','Дорасти до 5 уровня',s=>s.lvl>=5]];
 function stats(){
   let xp=0,n=0,full=false;const cnt={};
@@ -175,7 +178,7 @@ function stats(){
   let k=new Date(today);if(!good(ymd(k)))k.setDate(k.getDate()-1);
   let cur=0;while(good(ymd(k))){cur++;k.setDate(k.getDate()-1)}
   let lvl=1;while(xp>=xpAt(lvl+1))lvl++;
-  return{xp,n,full,cnt,best,cur,lvl};
+  return{xp,n,full,cnt,best,cur,lvl,bank:Math.max(0,bankTotal())};
 }
 function renderLvl(){
   const t=stats(),a=xpAt(t.lvl),b=xpAt(t.lvl+1);
@@ -214,9 +217,10 @@ const D=k=>S.days[k]||(S.days[k]={done:[],played:0});
 function calc(k){
   const d=S.days[k]||{done:[],played:0};let e=0,ban=false;
   d.done.forEach(id=>{const i=ALL[id];if(!i)return;e+=i[2];if(i[4])ban=true});
-  const total=Math.max(0,e),avail=ban?0:Math.min(total,MAX);
-  return{total,avail,ban,left:Math.max(0,avail-d.played),played:d.played};
+  const total=Math.max(0,e),extra=ban?0:(d.bank||0),avail=(ban?0:Math.min(total,MAX))+extra;
+  return{total,avail,ban,left:Math.max(0,avail-d.played),played:d.played,surplus:ban?0:Math.max(0,total-MAX),bank:d.bank||0};
 }
+const bankTotal=()=>Object.keys(S.days).reduce((a,k)=>{const c=calc(k);return a+c.surplus-c.bank},0);
 function renderDays(){
   $('days').innerHTML=week.map(d=>{const k=ymd(d);return `<button class="day" data-k="${k}" aria-pressed="${k===cur}">${DN[(d.getDay()+6)%7]}<small>${d.getDate()}</small></button>`}).join('');
 }
@@ -231,7 +235,7 @@ function renderTop(){
   const c=calc(cur);
   $('avail').textContent=c.avail;$('earned').textContent=c.total;$('left').textContent=c.left;
   $('fill').style.width=Math.min(100,c.avail/MAX*100)+'%';
-  $('ban').classList.toggle('on',c.ban);
+  $('ban').classList.toggle('on',c.ban);$('bank').textContent=Math.max(0,bankTotal());
 }
 function renderWeek(){
   let tot=0;
@@ -250,7 +254,7 @@ $('lists').onclick=e=>{
     if(it[2]!==0){const s=document.createElement('span');s.className='pop';s.textContent=(it[2]>0?'+':'')+it[2];s.style.color=it[2]<0?'var(--red)':'';b.appendChild(s)}}
   save();b.setAttribute('aria-pressed',i<0);renderTop();renderWeek();if(i<0)fx(it[2]<0||it[4]?'neg':'ok');checkAch();
 };
-$('p15').onclick=()=>{const d=D(cur);d.played=Math.min(MAX,d.played+15);save();renderTop()};
+$('p15').onclick=()=>{const d=D(cur);d.played=Math.min(MAX+60,d.played+15);save();renderTop()};
 $('m15').onclick=()=>{const d=D(cur);d.played=Math.max(0,d.played-15);save();renderTop()};
 $('prem').onclick=e=>{const b=e.target.closest('[data-p]');if(!b)return;S.prem[ymd(mon)]=+b.dataset.p;save();renderWeek()};
 $('rep').onclick=async()=>{
@@ -258,22 +262,31 @@ $('rep').onclick=async()=>{
   const L=ids=>ids.map(id=>ALL[id][1]).join(', ')||'нет';
   const pos=d.done.filter(id=>ALL[id][2]>0),neg=d.done.filter(id=>ALL[id][2]<=0);
   const txt=`Отчёт Платона, ${DN[(dt.getDay()+6)%7]} ${dt.getDate()}.${String(dt.getMonth()+1).padStart(2,'0')}\n`+
-   `Заработано: ${c.total} мин., доступно: ${c.avail}, сыграл: ${c.played}, осталось: ${c.left}\n`+
+   `Заработано: ${c.total} мин., доступно: ${c.avail} (из банка: ${c.bank}), сыграл: ${c.played}, осталось: ${c.left}\nВ банке: ${Math.max(0,bankTotal())} мин.\n`+
    `Сделано: ${L(pos)}\nНарушения: ${L(neg)}${c.ban?'\nСегодня без игр':''}\n`+
-   `Уровень ${t.lvl}, серия: ${t.cur} дн.\nКод: PT1|${cur}|${d.done.join('.')}|${d.played}`;
+   `Уровень ${t.lvl}, серия: ${t.cur} дн.\nКод: PT1|${cur}|${d.done.join('.')}|${d.played}|${d.bank||0}`;
   try{if(navigator.share){await navigator.share({text:txt});return}}catch(e){if(e&&e.name==='AbortError')return}
   try{await navigator.clipboard.writeText(txt);toast('Отчёт скопирован. Вставь его в чат с папой')}
   catch(e){prompt('Скопируй отчёт и отправь папе:',txt)}
 };
 $('impb').onclick=()=>{
-  const m=/PT1\|(\d{4}-\d\d-\d\d)\|([a-z0-9.]*)\|(\d{1,3})/.exec($('imp').value);
+  const m=/PT1\|(\d{4}-\d\d-\d\d)\|([a-z0-9.]*)\|(\d{1,3})(?:\|(\d{1,3}))?/.exec($('imp').value);
   if(!m){toast('Код отчёта не найден. Вставь сообщение целиком');return}
   const ids=m[2].split('.').filter(x=>Object.prototype.hasOwnProperty.call(ALL,x));
-  S.days[m[1]]={done:ids,played:Math.min(MAX,+m[3])};
+  S.days[m[1]]={done:ids,played:Math.min(MAX+60,+m[3]),bank:Math.min(60,+m[4]||0)};
   save();$('imp').value='';
   if(week.some(d=>ymd(d)===m[1]))cur=m[1];
   all();checkAch();toast('Отчёт за '+m[1]+' загружен');
 };
+$('bp').onclick=()=>{
+  const d=D(cur),c=calc(cur),wd=new Date(cur+'T12:00:00').getDay();
+  if(wd!==0&&wd!==6){toast('Банк можно тратить в субботу и воскресенье');return}
+  if(c.ban){toast('Сегодня без игр');return}
+  if(bankTotal()<15){toast('В банке пока мало минут');return}
+  if((d.bank||0)>=60){toast('Из банка можно взять до 60 минут в день');return}
+  d.bank=(d.bank||0)+15;save();renderTop();renderWeek();fx('ok');
+};
+$('bm').onclick=()=>{const d=D(cur);d.bank=Math.max(0,(d.bank||0)-15);save();renderTop();renderWeek()};
 $('snd').onclick=()=>{S.snd=S.snd===false;save();$('snd').textContent=S.snd===false?'🔇':'🔊';fx('ok')};
 $('theme').onclick=()=>{const r=document.documentElement,dark=getComputedStyle(r).getPropertyValue('--bg').trim()==='#12162a';r.dataset.theme=dark?'light':'dark'};
 all();checkAch();
